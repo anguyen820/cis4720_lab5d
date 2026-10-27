@@ -67,62 +67,103 @@ use cis_students_db;
 -- STEP 1. Create the students table, then describe it
 -- =================================================================
 
--- your comment goes here
--- your statements go here
+-- Creates a table to store student information, generate a new key using the count and assigning the student_id as the primary key.
+CREATE TABLE IF NOT EXISTS students(
+   student_id INT AUTO_INCREMENT primary key,
+   first_name VARCHAR(40) not null,
+   last_name VARCHAR(40) not null,
+   gpa float (4,2)
+);
 
+show full tables;
+describe students;
 
 -- =================================================================
 -- STEP 2. Insert four rows using NULL for student_id and gpa
 -- =================================================================
 
--- your comment goes here
--- your statements go here
-
+-- Insert rows into the student table without having to write the column names first
+/*INSERT into students VALUES
+(null, "Jenna", "Wilson", null),
+(null, "Robert", "Reese", null),
+(null, "Maria Elena", "Jimenez", null),
+(null, "Inder", "Singh", null);
+*/
+select * from students;
 
 -- =================================================================
 -- STEP 3. Insert two more rows, naming the columns first
 -- =================================================================
 
--- your comment goes here
--- your statements go here
+-- Insert new rows supplying the column name first so that null does not need tobe included for the student_id or the gpa
+Insert into students (first_name, last_name) values
+("Rita", "Nunez"),
+("James", "Toor");
 
+select * from students;
 
 -- =================================================================
 -- STEP 4. Delete James Toor
 -- =================================================================
 
--- your comment goes here
--- your statements go here
-
+-- Delete James Toor from student_id = 6
+delete from students where student_id = 6;
 
 -- =================================================================
 -- STEP 5. Create the test_scores table
 -- =================================================================
 
--- your comment goes here
--- your statements go here
+-- Creates new table scores_table using auto_increment
+-- include the student(student_id) as the foreign key
+Create table if not exists test_scores(
+   test_score_id int auto_increment primary key,
+   test_name varchar(20) not null,
+   student_id int not null,
+   score float,
+   foreign key (student_id) references students(student_id)
+);
 
 
 -- =================================================================
 -- STEP 6. Insert the ten test score rows
 -- =================================================================
 
--- your comment goes here
--- your statements go here
-
+-- insert row into test_score table
+/*
+insert into test_scores VALUES
+(null,"quiz1", 1, 90),
+(null, "quiz2", 4, 91),
+(null, "quiz1",  2, 85),
+(null, "quiz3", 2, 95),
+(null, "quiz1", 3, 95),
+(null, "quiz3", 3, 94),
+(null, "quiz2",  1, 80),
+(null, "quiz3",  4, 74),
+(null, "quiz2", 2, 72),
+(null, "quiz2", 3, 88);
+*/
+select * from test_scores;
 
 -- =================================================================
 -- STEP 7. Create the student_scores view from a LEFT OUTER JOIN,
 --         then query it twice
 -- =================================================================
 
--- your comment goes here
--- your statements go here
-
+-- write a left outer join so that all of the students in the student table display even if they don't have any test scores.
+/*create view student_scores as
+select students.student_id,
+concat(first_name, " ", last_name) as student_name,
+test_name, score
+from students left outer join test_scores
+   on students.student_id = test_scores.student_id
+   order by students.student_id;
+*/
+select * from student_scores;
+select * from student_scores where student_id = 3;
 
 -- =================================================================
 -- STEP 8. Create the calculate_gpa function
---
+
 -- Paste the block from the handout in here so it is part of what you
 -- submit, then RUN IT AT THE COMMAND PROMPT, not in VS Code.
 --
@@ -131,17 +172,50 @@ use cis_students_db;
 --   ERROR 1064 ... near 'DELIMITER $$' at line 1
 -- =================================================================
 
--- your comment goes here
--- your statements go here
+-- stop treating ; as the end of a statement, and use $$ instead,
+-- so the semicolons inside the function do not cut it short
+-- DELIMITER $$
+-- name the function and say it takes one argument, a student id
+CREATE FUNCTION calculate_gpa(p_student_id INT)
+-- the single value it hands back is a number with 2 decimal places
+RETURNS DECIMAL(4,2)
+-- promise that the same id always produces the same answer
+DETERMINISTIC
+-- it queries a table but never changes one
+READS SQL DATA
+-- the body starts here
+BEGIN
+-- a variable to hold the answer while we work it out
+DECLARE v_gpa DECIMAL(4,2);
+-- average that student's scores, rounded to 2 decimal places
+SELECT ROUND(AVG(score), 2)
+-- and put the result into the variable instead of returning it
+INTO v_gpa
+FROM test_scores
+-- only this student's rows
+WHERE student_id = p_student_id
+-- and ignore any row with no score recorded
+AND score IS NOT NULL;
+-- hand back the answer. a student with no scores averages to
+-- NULL, so IFNULL turns that into 0.00 rather than nothing
+RETURN IFNULL(v_gpa, 0.00);
+END
+$$
+-- put the delimiter back to a semicolon for everything that follows
+-- DELIMITER ;
 
+show create function calculate_gpa;
 
 -- =================================================================
 -- STEP 9. Run the function and fill in every gpa
 -- =================================================================
 
--- your comment goes here
--- your statements go here
-
+-- update the stuendts_table using the calculate_gpa
+-- the calculate_gpa function will update the gpa in the students table
+/*update students
+set gpa = calculate_gpa(student_id);
+*/
+select * from students;
 
 -- =================================================================
 -- STEP 10. Create the triggers that recalculate the gpa
@@ -151,9 +225,41 @@ use cis_students_db;
 -- and check that the gpa moved on its own.
 -- =================================================================
 
--- your comment goes here
--- your statements go here
+-- create trigger so that when the test_scores table is modified the calculate_gpa function runs
 
+-- $$ again, because a trigger body has semicolons in it too
+
+-- fires after a row is ADDED to test_scores
+/*CREATE TRIGGER trg_scores_after_insert
+AFTER INSERT ON test_scores
+-- once for every row the statement touched, not once per statement
+FOR EACH ROW
+BEGIN
+-- NEW is the row that was just inserted, so NEW.student_id is
+-- whichever student that score belongs to
+UPDATE students
+SET gpa = calculate_gpa(NEW.student_id)
+WHERE student_id = NEW.student_id;
+END
+*/
+-- and the same again for a score being CHANGED
+/*CREATE TRIGGER trg_scores_after_update
+AFTER UPDATE ON test_scores
+FOR EACH ROW
+BEGIN
+UPDATE students
+SET gpa = calculate_gpa(NEW.student_id)
+WHERE student_id = NEW.student_id;
+END
+*/
+
+show triggers;
+
+-- insert row for jenna, student_id = 1 in test_scores table
+insert into test_scores values(null,"quiz7", 1, 100);
+
+select * from student_scores where student_id = 1;
+select * from students where student_id = 1;
 
 -- =================================================================
 -- STEP 11. Push this file to GitHub
